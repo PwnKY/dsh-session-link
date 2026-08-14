@@ -1,6 +1,6 @@
 # dsh-session-link
 
-[中文](https://github.com/PwnKY/dsh-session-link/blob/master/README.md) | English
+[![npm](https://img.shields.io/npm/v/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) · [中文](https://github.com/PwnKY/dsh-session-link/blob/master/README.md) · English
 
 **Codex-style session deep links for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh)**
 
