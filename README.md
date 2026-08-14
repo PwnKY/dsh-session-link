@@ -1,10 +1,22 @@
 # dsh-session-link
 
-[![npm](https://img.shields.io/npm/v/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) · [English](https://github.com/PwnKY/dsh-session-link/blob/master/README.en.md) · 中文
+[![npm](https://img.shields.io/npm/v/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) [![npm downloads](https://img.shields.io/npm/dm/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) · [English](https://github.com/PwnKY/dsh-session-link/blob/master/README.en.md) · 中文
 
 **DeepSeek Harness 的 Codex 式会话深度链接插件**
 
 复制任意会话的链接，粘贴到另一个对话里 —— 被引用会话的上下文会被快照，并作为**受控的只读背景上下文**注入到你的提示词之前；同一链接也能在浏览器中直接打开对应会话。
+
+## 一键安装
+
+```bash
+# 通用 npm 安装（包本体）
+npm install dsh-session-link
+
+# DeepSeek Harness 推荐：直接装进你的 profile（如 web）
+dsh plugin --profile web add dsh-session-link
+```
+
+装完还需要在 profile 的 `cordis.patch.yml` 里加两行配置并重启 `dsh web`，详见[快速开始](#快速开始)。
 
 ```
 ┌─ 会话 A ─────────────────┐        ┌─ 会话 B ─────────────────────────┐

@@ -1,10 +1,22 @@
 # dsh-session-link
 
-[![npm](https://img.shields.io/npm/v/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) · [中文](https://github.com/PwnKY/dsh-session-link/blob/master/README.md) · English
+[![npm](https://img.shields.io/npm/v/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) [![npm downloads](https://img.shields.io/npm/dm/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) · [中文](https://github.com/PwnKY/dsh-session-link/blob/master/README.md) · English
 
 **Codex-style session deep links for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh)**
 
 Copy a link from any conversation, then paste it into a different conversation — the referenced session's context is snapshotted and injected as **bounded, read-only background context** right before your prompt. The same link also opens the conversation in the browser.
+
+## Install
+
+```bash
+# Generic npm install (package only)
+npm install dsh-session-link
+
+# Recommended for DeepSeek Harness: install straight into your profile (e.g. web)
+dsh plugin --profile web add dsh-session-link
+```
+
+After installing, add two rows to your profile's `cordis.patch.yml` and restart `dsh web` — see [Quick start](#quick-start).
 
 ```
 ┌─ session A ──────────────┐        ┌─ session B ──────────────────────┐
