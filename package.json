@@ -1,0 +1,59 @@
+{
+  "name": "dsh-session-link",
+  "version": "0.1.0",
+  "description": "Codex-style session deep links for DeepSeek Harness (dsh): copy a dsh:// link from any conversation, open it in the browser, or paste it into another conversation to read that session's context.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "dsh-open.cmd",
+    "register-protocol.ps1",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node host-half.test.mjs && node client-half.test.mjs",
+    "prepublishOnly": "npm test"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "deep-link",
+    "session",
+    "context",
+    "codex",
+    "plugin"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PwnKY/dsh-session-link.git"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-session-reference": "^0.1.0-rc.6"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-session-reference": "^0.1.0-rc.6"
+  }
+}
