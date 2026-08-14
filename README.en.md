@@ -9,14 +9,18 @@ Copy a link from any conversation, then paste it into a different conversation �
 ## Install
 
 ```bash
-# Generic npm install (package only)
-npm install dsh-session-link
-
-# Recommended for DeepSeek Harness: install straight into your profile (e.g. web)
+# One command: installs the package, auto-joins the profile's bundle layer,
+# and auto-applies the composition rows — no manual yml edits.
 dsh plugin --profile web add dsh-session-link
+
+# Restart the web GUI and refresh the page.
+dsh web
 ```
 
-After installing, add two rows to your profile's `cordis.patch.yml` and restart `dsh web` — see [Quick start](#quick-start).
+The package declares a `dsh.bundle` patch (`cordis.patch.yml`); `dsh plugin add` detects it and adds the package to `dsh.profile.bundles`, so the `session-reference` and `session-link` rows compose automatically at boot.
+
+> Generic npm install (package only, not wired into a profile): `npm install dsh-session-link`
+> Manual install (without the bundle mechanism): see [Quick start](#quick-start).
 
 ```
 ┌─ session A ──────────────┐        ┌─ session B ──────────────────────┐
@@ -58,26 +62,28 @@ Only links carrying a harness-shaped session id (`session-…`) are treated as r
 Requires DeepSeek Harness `dsh` (any profile with the web surface).
 
 ```bash
-# 1. Install the package into your profile (e.g. web) and add the two rows:
+# 1. One command: installs the package, auto-joins the profile's bundle layer,
+#    and auto-applies the composition rows (see "Install" above).
 dsh plugin --profile web add dsh-session-link
-```
 
-```yaml
-# ~/.dsh/profiles/web/cordis.patch.yml  (or your profile's patch layer)
-- insert:
-    - id: session-reference
-      name: '@deepseek-ai/dsh-session-reference'
-
-    - id: session-link
-      name: 'dsh-session-link'
-```
-
-```bash
 # 2. Restart the web GUI and refresh the page.
 dsh web
+
 # 3. (Windows, optional) make dsh:// links clickable:
 powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 ```
+
+> **Manual install (without the bundle mechanism)**: `pnpm add dsh-session-link` in the profile directory, then add to the profile's patch layer (e.g. `~/.dsh/profiles/web/cordis.patch.yml`):
+>
+> ```yaml
+> - insert:
+>     - id: session-reference
+>       name: '@deepseek-ai/dsh-session-reference'
+>
+>     - id: session-link
+>       name: 'dsh-session-link'
+> ```
+> Then restart `dsh web`.
 
 ## Usage
 

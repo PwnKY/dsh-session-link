@@ -1,0 +1,12 @@
+# dsh-session-link bundle patch — applied automatically when this package is
+# installed with `dsh plugin --profile <name> add dsh-session-link`
+# (the package declares `dsh.bundle.patch` in its package.json).
+#
+# Composes the two rows the feature needs: the upstream session-reference
+# service and this package's host/client plugin.
+- insert:
+    - id: session-reference
+      name: '@deepseek-ai/dsh-session-reference'
+
+    - id: session-link
+      name: 'dsh-session-link'

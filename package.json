@@ -1,16 +1,18 @@
 {
   "name": "dsh-session-link",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Codex-style session deep links for DeepSeek Harness (dsh): copy a dsh:// link from any conversation, open it in the browser, or paste it into another conversation to read that session's context.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "cordis.patch.yml",
     "dsh-open.cmd",
     "register-protocol.ps1",
     "LICENSE",
@@ -22,6 +24,9 @@
     "prepublishOnly": "npm test"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [

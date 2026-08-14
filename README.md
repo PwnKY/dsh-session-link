@@ -9,14 +9,17 @@
 ## 一键安装
 
 ```bash
-# 通用 npm 安装（包本体）
-npm install dsh-session-link
-
-# DeepSeek Harness 推荐：直接装进你的 profile（如 web）
+# 一条命令装完：安装包 + 自动加入 profile 的 bundle 层 + 自动应用配置行
 dsh plugin --profile web add dsh-session-link
+
+# 重启 Web GUI 并刷新页面
+dsh web
 ```
 
-装完还需要在 profile 的 `cordis.patch.yml` 里加两行配置并重启 `dsh web`，详见[快速开始](#快速开始)。
+无需手动修改任何 yml —— 插件自带 `dsh.bundle` patch（`cordis.patch.yml`），`dsh plugin add` 检测到后会自动把它加进 `dsh.profile.bundles`，启动时自动组合 `session-reference` 与 `session-link` 两行配置。
+
+> 通用 npm 安装（只装包、不进 profile）：`npm install dsh-session-link`
+> 手动安装方式（不依赖 bundle 机制）：见[快速开始](#快速开始)。
 
 ```
 ┌─ 会话 A ─────────────────┐        ┌─ 会话 B ─────────────────────────┐
@@ -58,26 +61,27 @@ dsh plugin --profile web add dsh-session-link
 需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile）。
 
 ```bash
-# 1. 把包安装进你的 profile（如 web），并加入两行配置：
+# 1. 一条命令安装（自动加入 bundle 层并应用配置，见上方「一键安装」）：
 dsh plugin --profile web add dsh-session-link
-```
 
-```yaml
-# ~/.dsh/profiles/web/cordis.patch.yml （或你 profile 的 patch 层）
-- insert:
-    - id: session-reference
-      name: '@deepseek-ai/dsh-session-reference'
-
-    - id: session-link
-      name: 'dsh-session-link'
-```
-
-```bash
 # 2. 重启 Web GUI 并刷新页面。
 dsh web
+
 # 3.（Windows，可选）让 dsh:// 链接可点击：
 powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 ```
+
+> **手动安装（不依赖 bundle 机制）**：先 `pnpm add dsh-session-link`（在 profile 目录），再在 profile 的 patch 层（如 `~/.dsh/profiles/web/cordis.patch.yml`）加入：
+>
+> ```yaml
+> - insert:
+>     - id: session-reference
+>       name: '@deepseek-ai/dsh-session-reference'
+>
+>     - id: session-link
+>       name: 'dsh-session-link'
+> ```
+> 然后重启 `dsh web`。
 
 ## 使用
 
