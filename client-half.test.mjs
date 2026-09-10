@@ -61,30 +61,57 @@ check("plugin name", exportsObj.name === "dsh-session-link");
 check("plugin inject lists slots/sessions/locale", Array.isArray(exportsObj.inject) && ["slots", "sessions", "locale"].every((s) => exportsObj.inject.includes(s)));
 check("plugin has apply", typeof exportsObj.apply === "function");
 
-// --- simulate apply with a fake ctx ---
+// --- apply against a ctx that mirrors the harness >= 0.1.2 slot lifecycle: the
+// parent entry declares `conversation.session.header.actions` only when its
+// view is assembled, which can be after this plugin activates. A direct
+// `register` there throws "slot ... is not declared", so `slots.inject` must
+// defer the registration until the declaration arrives.
 let opened = null;
 let registered = null;
-const fakeCtx = {
-  slots: {
-    register(options, component) {
-      registered = { options, component };
-      return () => {};
-    }
-  },
-  sessions: {
-    list: {
-      getSnapshot: () => ({ byId: { "session-abc123": { id: "session-abc123" } }, ids: ["session-abc123"] })
+let injection = null;
+let slotDeclared = false;
+function fakeCtx() {
+  return {
+    slots: {
+      register(options, component) {
+        if (!slotDeclared) throw new Error(`slot "${options.name}" is not declared (a parent entry's children table must declare it)`);
+        registered = { options, component };
+        return () => {};
+      },
+      inject(name, callback) {
+        injection = { name, callback };
+        if (slotDeclared) callback();
+        return () => {};
+      }
     },
-    open(id) { opened = id; }
-  },
-  locale: {
-    register() { return () => {}; }
-  },
-  effect() { return () => {}; }
-};
-exportsObj.apply(fakeCtx);
-check("registered header action", registered !== null && registered.options.name === "conversation.session.header.actions" && registered.options.id === "dsh-session-link.copy");
+    sessions: {
+      list: {
+        getSnapshot: () => ({ byId: { "session-abc123": { id: "session-abc123" } }, ids: ["session-abc123"] })
+      },
+      open(id) { opened = id; }
+    },
+    locale: {
+      register() { return () => {}; }
+    },
+    effect() { return () => {}; }
+  };
+}
+exportsObj.apply(fakeCtx());
+check("late declaration: no eager registration", registered === null);
+check("late declaration: inject waits for header actions", injection !== null && injection.name === "conversation.session.header.actions");
+slotDeclared = true;
+injection.callback();
+check("registered header action once declared", registered !== null && registered.options.name === "conversation.session.header.actions" && registered.options.id === "dsh-session-link.copy");
 check("deep link opened target session", opened === "session-abc123");
+
+// --- legacy harness without slots.inject: direct registration still works ---
+registered = null;
+injection = null;
+slotDeclared = true;
+const legacyCtx = fakeCtx();
+legacyCtx.slots.inject = void 0;
+exportsObj.apply(legacyCtx);
+check("legacy fallback registers directly", registered !== null && injection === null);
 
 // --- render the button component and simulate a click ---
 let copiedText = null;
