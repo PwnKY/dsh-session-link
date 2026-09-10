@@ -16,7 +16,7 @@ dsh plugin --profile web add dsh-session-link
 dsh web
 ```
 
-无需手动修改任何 yml —— 插件自带 `dsh.bundle` patch（`cordis.patch.yml`），`dsh plugin add` 检测到后会自动把它加进 `dsh.profile.bundles`，启动时自动组合 `session-reference` 与 `session-link` 两行配置。
+无需手动修改任何 yml —— 插件自带 `dsh.bundle` patch（`cordis.patch.yml`），`dsh plugin add` 检测到后会自动把它加进 `dsh.profile.bundles`，启动时自动组合 `session-link` 行配置。上游的 `session-reference` 服务自 dsh 0.1.0-rc.8 起由官方 web bundle 自行组合，插件不再重复插入（重复 id 会导致启动失败）。
 
 > 通用 npm 安装（只装包、不进 profile）：`npm install dsh-session-link`
 > 手动安装方式（不依赖 bundle 机制）：见[快速开始](#快速开始)。
@@ -42,7 +42,7 @@ dsh web
 
 本插件复用官方 [`@deepseek-ai/dsh-session-reference`](https://www.npmjs.com/package/@deepseek-ai/dsh-session-reference) 服务（它已实现规范 URI、mention 解析、快照投影与字节预算保留），再把它接入 agent 循环和 Web 界面：
 
-- **服务端（`lib/index.js`）** —— cordis 插件，挂在 `agent/pre-step` 钩子上：用户消息里出现会话深链时，把各种链接形式统一成规范 `dsh-session:` mention，解析为结构化引用，通过 `sessionReferenceResolver.prepare()` 快照源会话，并把聚合的只读快照放在直接提示之前。钩子与传输层无关，TUI 里粘贴规范 URI 同样生效。
+- **服务端（`lib/index.js`）** —— cordis 插件，挂在 `agent/pre-step` 钩子上：用户消息里出现会话深链时，把各种链接形式统一成规范 `dsh-session:` mention，解析为结构化引用，通过 `sessionReferenceResolver.prepare()` 快照源会话，并把聚合的只读快照放在直接提示之前。钩子与传输层无关，TUI 里粘贴规范 URI 同样生效。自 dsh 0.1.0-rc.8 起，上游服务自身也会在 `agent/pre-step` 上处理规范 URI；插件监听器以 `prepend` 跑在最外层，只处理上游不认识的深链形式（`dsh://`、web 链接），同一条链接不会被注入两次。
 - **浏览器端（`lib/client.js`）** —— 静态客户端包（`dsh.client` 声明），在 `conversation.session.header.actions` 渲染复制按钮，并在以 `/s/<会话ID>` 打开页面时自动选中目标会话。
 
 ## 链接格式
@@ -58,7 +58,7 @@ dsh web
 
 ## 快速开始
 
-需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile）。
+需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile），且 **dsh ≥ 0.1.0-rc.8**（该版本起官方 web bundle 自带 `session-reference` 服务）。更早的版本（≤ 0.1.0-rc.7）需在 profile 的 patch 层手动补上 `session-reference` 行，见下方手动安装说明。
 
 ```bash
 # 1. 一条命令安装（自动加入 bundle 层并应用配置，见上方「一键安装」）：
@@ -75,13 +75,15 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 >
 > ```yaml
 > - insert:
->     - id: session-reference
->       name: '@deepseek-ai/dsh-session-reference'
->
 >     - id: session-link
 >       name: 'dsh-session-link'
 > ```
-> 然后重启 `dsh web`。
+> 然后重启 `dsh web`。`dsh ≥ 0.1.0-rc.8` 无需插入 `session-reference` 行（官方 web bundle 已提供）；更早的版本要在 `session-link` 之前手动加上：
+>
+> ```yaml
+>     - id: session-reference
+>       name: '@deepseek-ai/dsh-session-reference'
+> ```
 
 ## 使用
 
@@ -108,7 +110,7 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1 -Uninstall
 
 ## 配置
 
-默认使用底层服务的配置（每条消息最多 3 个引用、每源 64 KiB）。在 profile 的 patch 层覆盖 `session-reference` 行即可调整，例如：
+默认使用底层服务的配置（每条消息最多 3 个引用、每源 64 KiB）。`session-reference` 行由官方 web bundle 提供，在 profile 的 patch 层按 id 覆盖它即可调整（patch 按 id 定位，不要求同一层声明），例如：
 
 ```yaml
 - id: session-reference
@@ -123,8 +125,9 @@ pnpm install
 npm test
 ```
 
-- `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、web 链接、规范 URI、普通文本、畸形 URI、prepare 失败）
+- `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、web 链接、规范 URI、普通文本、畸形 URI、prepare 失败、resolver 不返回 `additionalContext`），并断言 bundle patch 不重复插入 `session-reference`
 - `client-half.test.mjs` —— 在 DOM shim 下加载浏览器 bundle，检查插件表面、头部按钮注册、深链打开器与复制的 `dsh://` 值
+- `resolver-integration.test.mjs` —— 用官方真实 resolver（0.1.0-rc.8 起自带 `agent/pre-step` 监听）与插件同挂一个 cordis 上下文：断言 `dsh://` 链接注入一次、规范 URI 只由上游注入一次（防双注入/顺序回归），并验证自引用与不可读会话仍然 fail-open
 - `inspect-logs.mjs <会话目录> [会话ID…]` —— 解压拼接式 zstd 会话日志并报告 `session-reference` 事件（便于验证注入）
 
 ## 已知限制

@@ -17,7 +17,7 @@ dsh plugin --profile web add dsh-session-link
 dsh web
 ```
 
-The package declares a `dsh.bundle` patch (`cordis.patch.yml`); `dsh plugin add` detects it and adds the package to `dsh.profile.bundles`, so the `session-reference` and `session-link` rows compose automatically at boot.
+The package declares a `dsh.bundle` patch (`cordis.patch.yml`); `dsh plugin add` detects it and adds the package to `dsh.profile.bundles`, so the `session-link` row composes automatically at boot. The upstream `session-reference` service is composed by the shipped web bundle since dsh 0.1.0-rc.8 — this package no longer re-inserts it (a duplicate id fails the boot).
 
 > Generic npm install (package only, not wired into a profile): `npm install dsh-session-link`
 > Manual install (without the bundle mechanism): see [Quick start](#quick-start).
@@ -43,7 +43,7 @@ The package declares a `dsh.bundle` patch (`cordis.patch.yml`); `dsh plugin add`
 
 The feature reuses the shipped [`@deepseek-ai/dsh-session-reference`](https://www.npmjs.com/package/@deepseek-ai/dsh-session-reference) service, which already owns canonical session URIs (`dsh-session:<base64url>`), mention parsing, snapshot projection, and byte-budget retention. This package wires that service into the live agent loop and the web surface:
 
-- **Host half (`lib/index.js`)** — a cordis plugin subscribing to the `agent/pre-step` seam. When a claimed direct user prompt contains a session deep link, every supported link form is normalized into canonical `dsh-session:` mentions, parsed into structured references, snapshotted via `sessionReferenceResolver.prepare()`, and the aggregated read-only snapshot context is placed immediately before the direct prompt. The hook is transport-agnostic, so pasting a canonical URI into the TUI works the same way.
+- **Host half (`lib/index.js`)** — a cordis plugin subscribing to the `agent/pre-step` seam. When a claimed direct user prompt contains a session deep link, every supported link form is normalized into canonical `dsh-session:` mentions, parsed into structured references, snapshotted via `sessionReferenceResolver.prepare()`, and the aggregated read-only snapshot context is placed immediately before the direct prompt. The hook is transport-agnostic, so pasting a canonical URI into the TUI works the same way. Since dsh 0.1.0-rc.8 the service subscribes to `agent/pre-step` for canonical mentions itself; this listener runs outermost (`prepend` plus the `sessionReferenceResolver` injection) and only resolves the deep-link forms upstream does not know about (`dsh://`, web links), so one link never injects twice.
 - **Browser half (`lib/client.js`)** — a static client package (`dsh.client` declaration) rendering the copy button in `conversation.session.header.actions` and opening `/s/<sessionId>` deep links by selecting the target session once the list has loaded.
 
 ## Link formats
@@ -59,7 +59,7 @@ Only links carrying a harness-shaped session id (`session-…`) are treated as r
 
 ## Quick start
 
-Requires DeepSeek Harness `dsh` (any profile with the web surface).
+Requires DeepSeek Harness `dsh` (any profile with the web surface) and **dsh ≥ 0.1.0-rc.8**, which ships the `session-reference` service in its web bundle. On older versions (≤ 0.1.0-rc.7) add the `session-reference` row manually — see the manual-install note below.
 
 ```bash
 # 1. One command: installs the package, auto-joins the profile's bundle layer,
@@ -77,13 +77,15 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 >
 > ```yaml
 > - insert:
->     - id: session-reference
->       name: '@deepseek-ai/dsh-session-reference'
->
 >     - id: session-link
 >       name: 'dsh-session-link'
 > ```
-> Then restart `dsh web`.
+> Then restart `dsh web`. On dsh ≥ 0.1.0-rc.8 no `session-reference` row is needed (the web bundle provides it); on older versions add it manually before `session-link`:
+>
+> ```yaml
+>     - id: session-reference
+>       name: '@deepseek-ai/dsh-session-reference'
+> ```
 
 ## Usage
 
@@ -110,7 +112,7 @@ Two consecutive user-role messages: the `## Referenced sessions` untrusted snaps
 
 ## Configuration
 
-Defaults of the underlying service apply (max 3 references per message, 64 KiB per source). Tune by overriding the `session-reference` row in your profile's patch layer, e.g.:
+Defaults of the underlying service apply (max 3 references per message, 64 KiB per source). The `session-reference` row comes from the shipped web bundle; override it by id in your profile's patch layer (patches target ids, so the override need not live in the same layer), e.g.:
 
 ```yaml
 - id: session-reference
@@ -125,8 +127,9 @@ pnpm install
 npm test
 ```
 
-- `host-half.test.mjs` — drives the `agent/pre-step` listener through a real cordis waterfall (`dsh://` links, web links, canonical URIs, plain text, malformed URIs, prepare failures).
+- `host-half.test.mjs` — drives the `agent/pre-step` listener through a real cordis waterfall (`dsh://` links, web links, canonical URIs, plain text, malformed URIs, prepare failures, a resolver without `additionalContext`) and asserts the bundle patch never re-inserts `session-reference`.
 - `client-half.test.mjs` — loads the browser bundle under a DOM shim and checks the plugin surface, header-action registration, the deep-link opener, and the copied `dsh://` value.
+- `resolver-integration.test.mjs` — mounts the real shipped resolver (which listens on `agent/pre-step` itself since dsh 0.1.0-rc.8) beside this plugin on one cordis context: asserts the `dsh://` link injects once and a canonical URI is injected only by upstream (no double injection / ordering regression), and that self-references and unreadable sessions stay fail-open.
 - `inspect-logs.mjs <sessions-dir> [sessionId…]` — decompresses concatenated-zstd session logs and reports `session-reference` events (useful for verifying injection).
 
 ## Limitations

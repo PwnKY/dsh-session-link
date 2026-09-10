@@ -4,6 +4,7 @@
 // Run after `pnpm install` (devDependencies: @deepseek-ai/cordis,
 // @deepseek-ai/dsh-session-reference).
 import { Context } from "@deepseek-ai/cordis";
+import { readFileSync } from "node:fs";
 import { apply } from "./lib/index.js";
 
 let failures = 0;
@@ -12,16 +13,23 @@ function check(label, cond) {
   if (!cond) failures += 1;
 }
 
+// Packaging guard: since dsh 0.1.0-rc.8 the shipped web bundle already composes
+// the `session-reference` row, and re-inserting it fails the boot with
+// "duplicate loader entry id: session-reference".
+const patchYml = readFileSync(new URL("./cordis.patch.yml", import.meta.url), "utf8");
+check("bundle patch does not re-insert session-reference", !/^\s*-\s*id:\s*['"]?session-reference['"]?\s*$/m.test(patchYml));
+
 const ctx = new Context();
 const prepared = [];
 let failWith = null;
+let omitContext = false;
 const fakeResolver = {
   async prepare(agent, content, references, signal) {
     if (failWith !== null) throw failWith;
     prepared.push({ references });
     return {
       content,
-      additionalContext: { id: "injected-1", role: "user", source: { kind: "session-reference" }, content: [{ type: "text", text: "SNIPPET" }] }
+      ...(omitContext ? {} : { additionalContext: { id: "injected-1", role: "user", source: { kind: "session-reference" }, content: [{ type: "text", text: "SNIPPET" }] } })
     };
   }
 };
@@ -81,6 +89,16 @@ const prompt9 = { id: "m9", role: "user", source: { kind: "user" }, content: [{ 
 const decision9 = await ctx.waterfall({}, "agent/pre-step", { messages: [prompt9], turn: 9, step: 1 }, () => Promise.resolve({ kind: "enter", messages: [{ ...prompt9 }] }));
 const text9 = decision9.messages[1].content[0].text;
 check("dsh:// in markdown destination injected", decision9.messages.length === 2 && text9.includes("@session-abc123"));
+
+// Case 10: a resolver result without `additionalContext` (upstream returns
+// `{ content }` when nothing survives normalization) must not splice an
+// undefined message into the decision.
+omitContext = true;
+const prompt10 = { id: "m10", role: "user", source: { kind: "user" }, content: [{ type: "text", text: "看 http://127.0.0.1:3080/s/session-nocontext 的消息" }] };
+const decision10 = await ctx.waterfall({}, "agent/pre-step", { messages: [prompt10], turn: 10, step: 1 }, () => Promise.resolve({ kind: "enter", messages: [{ ...prompt10 }] }));
+check("missing additionalContext keeps one message", decision10.messages.length === 1 && decision10.messages.every((message) => message !== void 0 && message !== null));
+check("missing additionalContext still normalizes the prompt", decision10.messages[0].content[0].text === "看 @session-nocontext 的消息");
+omitContext = false;
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

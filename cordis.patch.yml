@@ -2,11 +2,15 @@
 # installed with `dsh plugin --profile <name> add dsh-session-link`
 # (the package declares `dsh.bundle.patch` in its package.json).
 #
-# Composes the two rows the feature needs: the upstream session-reference
-# service and this package's host/client plugin.
+# Inserts this package's host/client plugin row only. The upstream
+# `@deepseek-ai/dsh-session-reference` service is deliberately NOT inserted
+# here: since dsh 0.1.0-rc.8 the shipped web bundle already composes that row,
+# and a second `session-reference` id fails the whole boot with
+# "duplicate loader entry id: session-reference".
+#
+# On older harness versions (<= 0.1.0-rc.7) nothing provides the service, so
+# the row below stays pending and links stop resolving — add the upstream row
+# manually in that case (see the README's manual-install note).
 - insert:
-    - id: session-reference
-      name: '@deepseek-ai/dsh-session-reference'
-
     - id: session-link
       name: 'dsh-session-link'
