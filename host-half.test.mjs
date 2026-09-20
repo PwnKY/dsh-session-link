@@ -23,6 +23,7 @@ const ctx = new Context();
 const prepared = [];
 let failWith = null;
 let omitContext = false;
+const routes = [];
 const fakeResolver = {
   async prepare(agent, content, references, signal) {
     if (failWith !== null) throw failWith;
@@ -34,6 +35,15 @@ const fakeResolver = {
   }
 };
 ctx.provide("sessionReferenceResolver", fakeResolver);
+// Web compositions provide `webServer`; the plugin claims the legacy `/s`
+// prefix there so old browser links keep working (harness >= 0.1.1-rc.2 has
+// no SPA fallback and answers `/s/<id>` with 404).
+ctx.provide("webServer", {
+  register(route) {
+    routes.push(route);
+    return () => {};
+  }
+});
 apply(ctx);
 
 // Case 1: web deep link in a direct user prompt → context injected before prompt.
@@ -99,6 +109,32 @@ const decision10 = await ctx.waterfall({}, "agent/pre-step", { messages: [prompt
 check("missing additionalContext keeps one message", decision10.messages.length === 1 && decision10.messages.every((message) => message !== void 0 && message !== null));
 check("missing additionalContext still normalizes the prompt", decision10.messages[0].content[0].text === "看 @session-nocontext 的消息");
 omitContext = false;
+
+// Case 11: the browser query-form deep link (`/?session=<id>`, what the
+// protocol handler opens since the harness dropped its SPA fallback) is a
+// supported reference form too.
+const prompt11 = { id: "m11", role: "user", source: { kind: "user" }, content: [{ type: "text", text: "看 http://127.0.0.1:3080/?session=session-abc123 的记录" }] };
+const decision11 = await ctx.waterfall({}, "agent/pre-step", { messages: [prompt11], turn: 11, step: 1 }, () => Promise.resolve({ kind: "enter", messages: [{ ...prompt11 }] }));
+check("query-form web link injected", decision11.messages.length === 2 && decision11.messages[1].content[0].text === "看 @session-abc123 的记录");
+
+// Case 12: the legacy `/s/<id>` browser route redirects to the query form when
+// the composition serves the Web surface; unknown ids and non-GET methods are
+// answered without a redirect.
+await new Promise((resolve) => setTimeout(resolve, 0));
+const legacyRoute = routes.find((route) => route.path === "/s");
+check("legacy /s route registered on a web composition", legacyRoute !== void 0 && legacyRoute.kind === "prefix");
+function driveRoute(url, method = "GET") {
+  const captured = {};
+  legacyRoute.handler({ method, url }, {
+    writeHead(status, headers) { captured.status = status; captured.headers = headers; },
+    end() {}
+  });
+  return captured;
+}
+const redirect = driveRoute("/s/session-abc123");
+check("legacy /s redirects to the query form", redirect.status === 302 && redirect.headers.location === "/?session=session-abc123");
+check("legacy /s keeps unknown ids a 404", driveRoute("/s/not-a-session").status === 404);
+check("legacy /s keeps non-GET a 405", driveRoute("/s/session-abc123", "POST").status === 405);
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

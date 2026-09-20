@@ -1,6 +1,6 @@
 # Registers (or unregisters) the "dsh" URL protocol handler for this package,
 # so dsh://session/<id> links open the DeepSeek Harness web GUI at
-# http://127.0.0.1:3080/s/<id>.
+# http://127.0.0.1:3080/?session=<id>.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File register-protocol.ps1            # register

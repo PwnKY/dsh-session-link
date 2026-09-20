@@ -43,18 +43,21 @@ dsh web
 本插件复用官方 [`@deepseek-ai/dsh-session-reference`](https://www.npmjs.com/package/@deepseek-ai/dsh-session-reference) 服务（它已实现规范 URI、mention 解析、快照投影与字节预算保留），再把它接入 agent 循环和 Web 界面：
 
 - **服务端（`lib/index.js`）** —— cordis 插件，挂在 `agent/pre-step` 钩子上：用户消息里出现会话深链时，把各种链接形式统一成规范 `dsh-session:` mention，解析为结构化引用，通过 `sessionReferenceResolver.prepare()` 快照源会话，并把聚合的只读快照放在直接提示之前。钩子与传输层无关，TUI 里粘贴规范 URI 同样生效。自 dsh 0.1.0-rc.8 起，上游服务自身也会在 `agent/pre-step` 上处理规范 URI；插件监听器以 `prepend` 跑在最外层，只处理上游不认识的深链形式（`dsh://`、web 链接），同一条链接不会被注入两次。
-- **浏览器端（`lib/client.js`）** —— 静态客户端包（`dsh.client` 声明），在 `conversation.session.header.actions` 渲染复制按钮，并在以 `/s/<会话ID>` 打开页面时自动选中目标会话。
+- **浏览器端（`lib/client.js`）** —— 静态客户端包（`dsh.client` 声明），在 `conversation.session.header.actions` 渲染复制按钮，并在以 `/?session=<会话ID>`（或旧的 `/s/<会话ID>`、哈希形式 `#/s/<会话ID>`）打开页面时自动选中目标会话。
 
 ## 链接格式
 
 | 形式 | 示例 | 用途 |
 |---|---|---|
 | 深链 | `dsh://session/<会话ID>` | **按钮复制**；协议处理器可点击；粘贴可解析 |
-| 浏览器地址 | `http://<主机>:3080/s/<会话ID>` | 协议处理器打开的目标；粘贴同样识别 |
+| 浏览器地址 | `http://<主机>:3080/?session=<会话ID>` | 协议处理器打开的目标；粘贴同样识别 |
+| 旧式浏览器地址 | `http://<主机>:3080/s/<会话ID>` | 服务端 302 到上面的形式；粘贴同样识别 |
 | 规范 URI | `dsh-session:<base64url(JSON 会话ID)>` | `dsh-session-reference` 的无损 URI；粘贴可解析 |
 | Markdown mention | `@[标签](dsh-session:…)` | 解析后显示为 `@标签`（TUI mention 形式） |
 
 只有带 `session-…` 形态会话 ID 的链接才会被当作引用，无关的 `dsh://…`、`/s/…` 文本不会被误伤。
+
+> **为什么浏览器地址换成了 `?session=`**：自 dsh 0.1.1-rc.2 起 Web 服务器只把 `/`（及配置的 index）当入口，未知路径（含 `/s/<ID>`）一律 404 —— 旧的 SPA fallback 被移除了。会话标记于是改挂在 index 路由上。插件的服务端半边还会注册 `/s/<ID>` → `/?session=<ID>` 的 302 重定向，所以旧链接、书签和历史记录照样能打开。
 
 ## 快速开始
 
@@ -93,7 +96,7 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 
 ## Windows `dsh://` 协议处理器
 
-`register-protocol.ps1` 在当前用户下注册 `dsh` URL 协议（HKCU，无需管理员权限）：任何地方点击 `dsh://session/<ID>`（浏览器、聊天软件、终端）都会打开 `http://127.0.0.1:3080/s/<ID>` 并选中该会话。启动器为 `dsh-open.cmd`。
+`register-protocol.ps1` 在当前用户下注册 `dsh` URL 协议（HKCU，无需管理员权限）：任何地方点击 `dsh://session/<ID>`（浏览器、聊天软件、终端）都会打开 `http://127.0.0.1:3080/?session=<ID>` 并选中该会话。启动器为 `dsh-open.cmd`。
 
 ```powershell
 # 注册
@@ -125,15 +128,17 @@ pnpm install
 npm test
 ```
 
-- `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、web 链接、规范 URI、普通文本、畸形 URI、prepare 失败、resolver 不返回 `additionalContext`），并断言 bundle patch 不重复插入 `session-reference`
-- `client-half.test.mjs` —— 在 DOM shim 下加载浏览器 bundle，检查插件表面、头部按钮注册、深链打开器与复制的 `dsh://` 值
+- `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、两种 web 链接、规范 URI、普通文本、畸形 URI、prepare 失败、resolver 不返回 `additionalContext`），断言 bundle patch 不重复插入 `session-reference`，并驱动 `/s/<ID>` 重定向路由（302 / 404 / 405）
+- `client-half.test.mjs` —— 在 DOM shim 下加载浏览器 bundle，检查插件表面、头部按钮注册、四种深链 URL 形式（`?session=`、`/s/`、两种哈希）与复制的 `dsh://` 值
 - `resolver-integration.test.mjs` —— 用官方真实 resolver（0.1.0-rc.8 起自带 `agent/pre-step` 监听）与插件同挂一个 cordis 上下文：断言 `dsh://` 链接注入一次、规范 URI 只由上游注入一次（防双注入/顺序回归），并验证自引用与不可读会话仍然 fail-open
 - `inspect-logs.mjs <会话目录> [会话ID…]` —— 解压拼接式 zstd 会话日志并报告 `session-reference` 事件（便于验证注入）
 
 ## 已知限制
 
 - 链接仅在本机（持有两个会话的 `$DSH_HOME`）有效，会话 ID 是不透明且本地的。
-- 浏览器深链只打开当前会话列表（同一工作区）内的会话，列表外的会话不会自动恢复。
+- 浏览器深链只打开当前会话列表内、且未被归档的会话；被归档的会话会被上游清除选择，列表外的会话不会自动恢复。
+- 浏览器深链需要该浏览器已持有此 `dsh web` 的登录 cookie（用 `dsh web` 打印的带 token 的 URL 访问过一次即可，cookie 有效期内一直有效）；否则会看到 401 提示。
+- `/s/<ID>` 旧链接依赖插件注册的 302 路由（组合里没有 `webServer` 时不注册），新式 `?session=<ID>` 不受影响。
 - 引用会话不可读时（不存在、超预算、自引用），链接保留为原文，消息照常发送，失败记录在服务端日志。
 - 仅文本投影：图片等非文本块不跨会话传播（上游服务限制）。
 
