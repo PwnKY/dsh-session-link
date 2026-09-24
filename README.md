@@ -43,7 +43,7 @@ dsh web
 本插件复用官方 [`@deepseek-ai/dsh-session-reference`](https://www.npmjs.com/package/@deepseek-ai/dsh-session-reference) 服务（它已实现规范 URI、mention 解析、快照投影与字节预算保留），再把它接入 agent 循环和 Web 界面：
 
 - **服务端（`lib/index.js`）** —— cordis 插件，挂在 `agent/pre-step` 钩子上：用户消息里出现会话深链时，把各种链接形式统一成规范 `dsh-session:` mention，解析为结构化引用，通过 `sessionReferenceResolver.prepare()` 快照源会话，并把聚合的只读快照放在直接提示之前。钩子与传输层无关，TUI 里粘贴规范 URI 同样生效。自 dsh 0.1.0-rc.8 起，上游服务自身也会在 `agent/pre-step` 上处理规范 URI；插件监听器以 `prepend` 跑在最外层，只处理上游不认识的深链形式（`dsh://`、web 链接），同一条链接不会被注入两次。
-- **浏览器端（`lib/client.js`）** —— 静态客户端包（`dsh.client` 声明），在 `conversation.session.header.actions` 渲染复制按钮，并在以 `/?session=<会话ID>`（或旧的 `/s/<会话ID>`、哈希形式 `#/s/<会话ID>`）打开页面时自动选中目标会话。
+- **浏览器端（`lib/client.js`）** —— 静态客户端包（`dsh.client` 声明），在 `conversation.session.header.actions` 渲染复制按钮，并在以 `/?session=<会话ID>`（或旧的 `/s/<会话ID>`、哈希形式 `#/s/<会话ID>`）打开页面时，等会话目录加载后经 `ctx.uiWorkspace.openSession()` 选中目标会话（约 10 秒有界重试，最终失败时告警）。
 
 ## 链接格式
 
@@ -61,7 +61,7 @@ dsh web
 
 ## 快速开始
 
-需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile），且 **dsh ≥ 0.1.0-rc.8**（该版本起官方 web bundle 自带 `session-reference` 服务）。更早的版本（≤ 0.1.0-rc.7）需在 profile 的 patch 层手动补上 `session-reference` 行，见下方手动安装说明。
+需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile），且 **dsh ≥ 0.1.7-rc.1**：该下限针对浏览器半边依赖的 `ctx.uiWorkspace.openSession()` 深链导航接口（更早版本没有该接口，旧版 `ctx.sessions.open` 也已被上游移除）。`session-reference` 服务并非在该版本才引入——官方 web bundle 自 dsh 0.1.0-rc.8 起就已自带。
 
 ```bash
 # 1. 一条命令安装（自动加入 bundle 层并应用配置，见上方「一键安装」）：
@@ -81,12 +81,7 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 >     - id: session-link
 >       name: 'dsh-session-link'
 > ```
-> 然后重启 `dsh web`。`dsh ≥ 0.1.0-rc.8` 无需插入 `session-reference` 行（官方 web bundle 已提供）；更早的版本要在 `session-link` 之前手动加上：
->
-> ```yaml
->     - id: session-reference
->       name: '@deepseek-ai/dsh-session-reference'
-> ```
+> 然后重启 `dsh web`。`session-reference` 行无需手动插入：官方 web bundle 自 dsh 0.1.0-rc.8 起就已提供。
 
 ## 使用
 
@@ -129,14 +124,14 @@ npm test
 ```
 
 - `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、两种 web 链接、规范 URI、普通文本、畸形 URI、prepare 失败、resolver 不返回 `additionalContext`），断言 bundle patch 不重复插入 `session-reference`，并驱动 `/s/<ID>` 重定向路由（302 / 404 / 405）
-- `client-half.test.mjs` —— 在 DOM shim 下加载浏览器 bundle，检查插件表面、头部按钮注册、四种深链 URL 形式（`?session=`、`/s/`、两种哈希）与复制的 `dsh://` 值
+- `client-half.test.mjs` —— 在 DOM shim 与可控假定时器下加载浏览器 bundle，检查插件表面与 `inject`（含 `uiWorkspace`）、头部按钮注册、复制按钮仍输出 `dsh://` 值，并对一个**不含 `sessions.open`** 的假上下文驱动 `ctx.uiWorkspace.openSession()`：四种深链 URL 形式与优先级、编码/畸形/空/无关 URL、目录延迟到达、同步导航瞬时失败、`getSnapshot` 瞬时抛错后恢复、目标缺失时按 50 次 × 200ms 的有界预算（~10 秒）后告警、`ctx.effect` 销毁取消排队重试以及销毁后已出队回调不再导航、成功只导航一次；同时校验包清单的 `dsh.client.inject` 与 `^0.1.7-rc.1` 依赖下限，并对所安装真实 `dsh-client-ui-workspace`（版本仅作诊断输出、不做等值断言）断言 `openSession(target: SessionTarget): void` 接口声明
 - `resolver-integration.test.mjs` —— 用官方真实 resolver（0.1.0-rc.8 起自带 `agent/pre-step` 监听）与插件同挂一个 cordis 上下文：断言 `dsh://` 链接注入一次、规范 URI 只由上游注入一次（防双注入/顺序回归），并验证自引用与不可读会话仍然 fail-open
 - `inspect-logs.mjs <会话目录> [会话ID…]` —— 解压拼接式 zstd 会话日志并报告 `session-reference` 事件（便于验证注入）
 
 ## 已知限制
 
 - 链接仅在本机（持有两个会话的 `$DSH_HOME`）有效，会话 ID 是不透明且本地的。
-- 浏览器深链只打开当前会话列表内、且未被归档的会话；被归档的会话会被上游清除选择，列表外的会话不会自动恢复。
+- 浏览器深链只打开当前会话列表内、且未被归档的会话；被归档的会话会被上游清除选择，列表外的会话不会自动恢复。目标一直不在会话目录中时，客户端在约 10 秒有界重试后放弃并告警，页面停留在默认视图。
 - 浏览器深链需要该浏览器已持有此 `dsh web` 的登录 cookie（用 `dsh web` 打印的带 token 的 URL 访问过一次即可，cookie 有效期内一直有效）；否则会看到 401 提示。
 - `/s/<ID>` 旧链接依赖插件注册的 302 路由（组合里没有 `webServer` 时不注册），新式 `?session=<ID>` 不受影响。
 - 引用会话不可读时（不存在、超预算、自引用），链接保留为原文，消息照常发送，失败记录在服务端日志。

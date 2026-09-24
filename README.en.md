@@ -44,7 +44,7 @@ The package declares a `dsh.bundle` patch (`cordis.patch.yml`); `dsh plugin add`
 The feature reuses the shipped [`@deepseek-ai/dsh-session-reference`](https://www.npmjs.com/package/@deepseek-ai/dsh-session-reference) service, which already owns canonical session URIs (`dsh-session:<base64url>`), mention parsing, snapshot projection, and byte-budget retention. This package wires that service into the live agent loop and the web surface:
 
 - **Host half (`lib/index.js`)** — a cordis plugin subscribing to the `agent/pre-step` seam. When a claimed direct user prompt contains a session deep link, every supported link form is normalized into canonical `dsh-session:` mentions, parsed into structured references, snapshotted via `sessionReferenceResolver.prepare()`, and the aggregated read-only snapshot context is placed immediately before the direct prompt. The hook is transport-agnostic, so pasting a canonical URI into the TUI works the same way. Since dsh 0.1.0-rc.8 the service subscribes to `agent/pre-step` for canonical mentions itself; this listener runs outermost (`prepend` plus the `sessionReferenceResolver` injection) and only resolves the deep-link forms upstream does not know about (`dsh://`, web links), so one link never injects twice.
-- **Browser half (`lib/client.js`)** — a static client package (`dsh.client` declaration) rendering the copy button in `conversation.session.header.actions` and opening `/?session=<sessionId>` deep links (legacy `/s/<sessionId>` and `#/s/<sessionId>` forms included) by selecting the target session once the list has loaded.
+- **Browser half (`lib/client.js`)** — a static client package (`dsh.client` declaration) rendering the copy button in `conversation.session.header.actions` and opening `/?session=<sessionId>` deep links (legacy `/s/<sessionId>` and `#/s/<sessionId>` forms included) by selecting the target session through `ctx.uiWorkspace.openSession()` once the catalog has loaded (bounded ~10 s retry, with a warning on final failure).
 
 ## Link formats
 
@@ -62,7 +62,7 @@ Only links carrying a harness-shaped session id (`session-…`) are treated as r
 
 ## Quick start
 
-Requires DeepSeek Harness `dsh` (any profile with the web surface) and **dsh ≥ 0.1.0-rc.8**, which ships the `session-reference` service in its web bundle. On older versions (≤ 0.1.0-rc.7) add the `session-reference` row manually — see the manual-install note below.
+Requires DeepSeek Harness `dsh` (any profile with the web surface) and **dsh ≥ 0.1.7-rc.1**: that minimum is for the `ctx.uiWorkspace.openSession()` navigation seam the browser half depends on (earlier versions lack it, and the old `ctx.sessions.open` was removed upstream). The `session-reference` service is not tied to that release — the shipped web bundle has provided it since dsh 0.1.0-rc.8.
 
 ```bash
 # 1. One command: installs the package, auto-joins the profile's bundle layer,
@@ -83,12 +83,7 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 >     - id: session-link
 >       name: 'dsh-session-link'
 > ```
-> Then restart `dsh web`. On dsh ≥ 0.1.0-rc.8 no `session-reference` row is needed (the web bundle provides it); on older versions add it manually before `session-link`:
->
-> ```yaml
->     - id: session-reference
->       name: '@deepseek-ai/dsh-session-reference'
-> ```
+> Then restart `dsh web`. No `session-reference` row is needed: the shipped web bundle has provided it since dsh 0.1.0-rc.8.
 
 ## Usage
 
@@ -131,14 +126,14 @@ npm test
 ```
 
 - `host-half.test.mjs` — drives the `agent/pre-step` listener through a real cordis waterfall (`dsh://` links, both web link forms, canonical URIs, plain text, malformed URIs, prepare failures, a resolver without `additionalContext`), asserts the bundle patch never re-inserts `session-reference`, and drives the legacy `/s/<id>` redirect route (302 / 404 / 405).
-- `client-half.test.mjs` — loads the browser bundle under a DOM shim and checks the plugin surface, header-action registration, all four deep-link URL forms (`?session=`, `/s/`, and both hashes), and the copied `dsh://` value.
+- `client-half.test.mjs` — loads the browser bundle under a DOM shim with controllable fake timers: checks the plugin surface and `inject` (including `uiWorkspace`), header-action registration, that the copy button still emits the `dsh://` value, and drives `ctx.uiWorkspace.openSession()` against a fake context deliberately **without `sessions.open`** (all four deep-link URL forms plus precedence, encoded/malformed/empty/unrelated URLs, a delayed catalog, a transient synchronous navigation failure, a transient `getSnapshot` throw, a missing target that warns after ~10 s with a bounded budget (50 retries of 200 ms), `ctx.effect` teardown cancelling queued retries plus a late already-dequeued callback after disposal, and exactly-once navigation). It also checks the package manifest's `dsh.client.inject` and `^0.1.7-rc.1` dependency minimums, and asserts the installed real `dsh-client-ui-workspace`'s `openSession(target: SessionTarget): void` declaration (the installed version is reported but not pinned).
 - `resolver-integration.test.mjs` — mounts the real shipped resolver (which listens on `agent/pre-step` itself since dsh 0.1.0-rc.8) beside this plugin on one cordis context: asserts the `dsh://` link injects once and a canonical URI is injected only by upstream (no double injection / ordering regression), and that self-references and unreadable sessions stay fail-open.
 - `inspect-logs.mjs <sessions-dir> [sessionId…]` — decompresses concatenated-zstd session logs and reports `session-reference` events (useful for verifying injection).
 
 ## Limitations
 
 - Links resolve only on the machine whose `$DSH_HOME` holds both sessions; session ids are opaque and local.
-- The browser deep link opens sessions present in the current session list and not archived; an archived target is cleared by upstream and sessions outside the list are not auto-resumed.
+- The browser deep link opens sessions present in the current session list and not archived; an archived target is cleared by upstream and sessions outside the list are not auto-resumed. When the target never appears in the catalog, the client gives up after a bounded ~10 s retry and warns, leaving the default view in place.
 - The browser deep link needs that browser to hold this `dsh web`'s login cookie (visit the token URL printed by `dsh web` once; the cookie then lasts its full lifetime); otherwise the request answers 401.
 - The legacy `/s/<id>` form depends on the plugin's redirect route (not registered in compositions without `webServer`); the new `?session=<id>` form does not.
 - If a referenced session cannot be read (missing, budget exceeded, self-reference), the link stays as plain text and the message still sends; the failure is logged on the host.

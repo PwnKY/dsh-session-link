@@ -8,9 +8,10 @@
 # and a second `session-reference` id fails the whole boot with
 # "duplicate loader entry id: session-reference".
 #
-# On older harness versions (<= 0.1.0-rc.7) nothing provides the service, so
-# the row below stays pending and links stop resolving — add the upstream row
-# manually in that case (see the README's manual-install note).
+# This plugin requires dsh >= 0.1.7-rc.1 for the `ctx.uiWorkspace.openSession()`
+# navigation seam the browser half uses; earlier versions lack that seam. The
+# `session-reference` service is not the reason for the floor: the shipped web
+# bundle has provided it since dsh 0.1.0-rc.8.
 - insert:
     - id: session-link
       name: 'dsh-session-link'
