@@ -1,6 +1,6 @@
 # dsh-session-link
 
-[![npm](https://img.shields.io/npm/v/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) [![npm downloads](https://img.shields.io/npm/dm/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) · [English](https://github.com/PwnKY/dsh-session-link/blob/master/README.en.md) · 中文
+[![npm](https://img.shields.io/npm/v/dsh-session-link.svg?cacheSeconds=300)](https://www.npmjs.com/package/dsh-session-link) [![npm downloads](https://img.shields.io/npm/dm/dsh-session-link.svg)](https://www.npmjs.com/package/dsh-session-link) · [English](https://github.com/PwnKY/dsh-session-link/blob/master/README.en.md) · 中文
 
 **DeepSeek Harness 的 Codex 式会话深度链接插件**
 
