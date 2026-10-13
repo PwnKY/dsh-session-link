@@ -102,14 +102,16 @@ check("client bundle no longer references sessions.open", !/\.sessions\.open\s*\
 
 // --- package manifest metadata: client module injection + aligned DSH minimums ---
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
-// The declared minimum is ^0.1.7-rc.1, so any later patch or release stays
-// valid: report the installed version instead of pinning it.
+// The declared range spans the 0.1.7 and 0.2.x DSH lines, so any later patch or
+// release inside either line stays valid: report the installed version instead
+// of pinning it.
+const DSH_RANGE = "^0.1.7-rc.1 || ^0.2.0-rc.2";
 console.log(`INFO  dsh-session-link package version ${pkg.version}`);
 check("package version present", typeof pkg.version === "string" && /^\d+\.\d+\.\d+/.test(pkg.version));
 check("dsh.client.inject includes ui-workspace", pkg.dsh?.client?.inject?.includes("@deepseek-ai/dsh-client-ui-workspace") === true);
 check("dsh.client.inject keeps locale + ui-conversation", ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-conversation"].every((id) => pkg.dsh.client.inject.includes(id)));
-check("peer client packages require ^0.1.7-rc.1", ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-workspace"].every((id) => pkg.peerDependencies[id] === "^0.1.7-rc.1"));
-check("session-reference dependency requires ^0.1.7-rc.1", pkg.dependencies["@deepseek-ai/dsh-session-reference"] === "^0.1.7-rc.1");
+check("peer client packages span the 0.1.7 / 0.2.x lines", ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-workspace"].every((id) => pkg.peerDependencies[id] === DSH_RANGE));
+check("session-reference dependency spans the 0.1.7 / 0.2.x lines", pkg.dependencies["@deepseek-ai/dsh-session-reference"] === DSH_RANGE);
 
 // --- confirm the installed (real) workspace package exposes the navigation seam ---
 {
@@ -122,8 +124,9 @@ check("session-reference dependency requires ^0.1.7-rc.1", pkg.dependencies["@de
   } catch {
     /* left null — reported by the checks below */
   }
-  // The dependency minimum is ^0.1.7-rc.1: report the exact installed version
-  // (diagnostic) and assert the navigation seam exists rather than pinning it.
+  // The dependency range spans the 0.1.7 / 0.2.x lines: report the exact
+  // installed version (diagnostic) and assert the navigation seam exists
+  // rather than pinning it.
   console.log(`INFO  installed @deepseek-ai/dsh-client-ui-workspace version ${realVersion ?? "unresolved"}`);
   check("installed real workspace package present", typeof realVersion === "string" && realVersion.length > 0);
   check("installed real workspace declares openSession(target: SessionTarget): void", realNavigation !== null && /openSession\(target:\s*SessionTarget\):\s*void/.test(realNavigation));

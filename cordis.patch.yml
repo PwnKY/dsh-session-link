@@ -10,8 +10,10 @@
 #
 # This plugin requires dsh >= 0.1.7-rc.1 for the `ctx.uiWorkspace.openSession()`
 # navigation seam the browser half uses; earlier versions lack that seam. The
-# `session-reference` service is not the reason for the floor: the shipped web
-# bundle has provided it since dsh 0.1.0-rc.8.
+# 0.1.7 and 0.2.x lines are both supported (the declared ranges span them, and
+# 0.2.0-rc.2 is verified end to end). The `session-reference` service is not
+# the reason for the floor: the shipped web bundle has provided it since
+# dsh 0.1.0-rc.8.
 - insert:
     - id: session-link
       name: 'dsh-session-link'

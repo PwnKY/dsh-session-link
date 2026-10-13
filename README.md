@@ -61,7 +61,7 @@ dsh web
 
 ## 快速开始
 
-需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile），且 **dsh ≥ 0.1.7-rc.1**：该下限针对浏览器半边依赖的 `ctx.uiWorkspace.openSession()` 深链导航接口（更早版本没有该接口，旧版 `ctx.sessions.open` 也已被上游移除）。`session-reference` 服务并非在该版本才引入——官方 web bundle 自 dsh 0.1.0-rc.8 起就已自带。
+需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile），且 **dsh ≥ 0.1.7-rc.1**（**0.1.7 与 0.2.x 两条线都支持**，其中 0.2.0-rc.2 已做端到端验证）：该下限针对浏览器半边依赖的 `ctx.uiWorkspace.openSession()` 深链导航接口（更早版本没有该接口，旧版 `ctx.sessions.open` 也已被上游移除）。`session-reference` 服务并非在该版本才引入——官方 web bundle 自 dsh 0.1.0-rc.8 起就已自带。
 
 ```bash
 # 1. 一条命令安装（自动加入 bundle 层并应用配置，见上方「一键安装」）：
@@ -124,7 +124,7 @@ npm test
 ```
 
 - `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、两种 web 链接、规范 URI、普通文本、畸形 URI、prepare 失败、resolver 不返回 `additionalContext`），断言 bundle patch 不重复插入 `session-reference`，并驱动 `/s/<ID>` 重定向路由（302 / 404 / 405）
-- `client-half.test.mjs` —— 在 DOM shim 与可控假定时器下加载浏览器 bundle，检查插件表面与 `inject`（含 `uiWorkspace`）、头部按钮注册、复制按钮仍输出 `dsh://` 值，并对一个**不含 `sessions.open`** 的假上下文驱动 `ctx.uiWorkspace.openSession()`：四种深链 URL 形式与优先级、编码/畸形/空/无关 URL、目录延迟到达、同步导航瞬时失败、`getSnapshot` 瞬时抛错后恢复、目标缺失时按 50 次 × 200ms 的有界预算（~10 秒）后告警、`ctx.effect` 销毁取消排队重试以及销毁后已出队回调不再导航、成功只导航一次；同时校验包清单的 `dsh.client.inject` 与 `^0.1.7-rc.1` 依赖下限，并对所安装真实 `dsh-client-ui-workspace`（版本仅作诊断输出、不做等值断言）断言 `openSession(target: SessionTarget): void` 接口声明
+- `client-half.test.mjs` —— 在 DOM shim 与可控假定时器下加载浏览器 bundle，检查插件表面与 `inject`（含 `uiWorkspace`）、头部按钮注册、复制按钮仍输出 `dsh://` 值，并对一个**不含 `sessions.open`** 的假上下文驱动 `ctx.uiWorkspace.openSession()`：四种深链 URL 形式与优先级、编码/畸形/空/无关 URL、目录延迟到达、同步导航瞬时失败、`getSnapshot` 瞬时抛错后恢复、目标缺失时按 50 次 × 200ms 的有界预算（~10 秒）后告警、`ctx.effect` 销毁取消排队重试以及销毁后已出队回调不再导航、成功只导航一次；同时校验包清单的 `dsh.client.inject` 与 `^0.1.7-rc.1 || ^0.2.0-rc.2` 依赖范围，并对所安装真实 `dsh-client-ui-workspace`（版本仅作诊断输出、不做等值断言）断言 `openSession(target: SessionTarget): void` 接口声明
 - `resolver-integration.test.mjs` —— 用官方真实 resolver（0.1.0-rc.8 起自带 `agent/pre-step` 监听）与插件同挂一个 cordis 上下文：断言 `dsh://` 链接注入一次、规范 URI 只由上游注入一次（防双注入/顺序回归），并验证自引用与不可读会话仍然 fail-open
 - `inspect-logs.mjs <会话目录> [会话ID…]` —— 解压拼接式 zstd 会话日志并报告 `session-reference` 事件（便于验证注入）
 
