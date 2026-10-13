@@ -61,7 +61,7 @@ dsh web
 
 ## 快速开始
 
-需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile），且 **dsh ≥ 0.1.7-rc.1**（**0.1.7 与 0.2.x 两条线都支持**，其中 0.2.0-rc.2 已做端到端验证）：该下限针对浏览器半边依赖的 `ctx.uiWorkspace.openSession()` 深链导航接口（更早版本没有该接口，旧版 `ctx.sessions.open` 也已被上游移除）。`session-reference` 服务并非在该版本才引入——官方 web bundle 自 dsh 0.1.0-rc.8 起就已自带。
+需要 DeepSeek Harness 的 `dsh`（任意带 Web 界面的 profile），且 **dsh ≥ 0.1.7-rc.1**（**0.1.7 与 0.2.x 两条线都支持**，其中 0.2.0-rc.2 已做端到端验证）：该下限针对浏览器半边依赖的 `ctx.uiWorkspace.openSession()` 深链导航接口（更早版本没有该接口，旧版 `ctx.sessions.open` 也已被上游移除）。`session-reference` 服务并非在该版本才引入——官方 web bundle 自 dsh 0.1.0-rc.8 起就已自带。包清单同时声明 `engines.dsh`（`^0.1.7-rc.1 || ^0.2.0-rc.2`），插件市场可直接据此判定兼容性，不必再拿 peer 硬比。
 
 ```bash
 # 1. 一条命令安装（自动加入 bundle 层并应用配置，见上方「一键安装」）：
@@ -91,16 +91,40 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 
 ## Windows `dsh://` 协议处理器
 
-`register-protocol.ps1` 在当前用户下注册 `dsh` URL 协议（HKCU，无需管理员权限）：任何地方点击 `dsh://session/<ID>`（浏览器、聊天软件、终端）都会打开 `http://127.0.0.1:3080/?session=<ID>` 并选中该会话。启动器为 `dsh-open.cmd`。
+`register-protocol.ps1` 在当前用户下注册 `dsh` URL 协议（HKCU，无需管理员权限）：任何地方点击 `dsh://session/<ID>`（浏览器、聊天软件、终端）都会打开本机 Web GUI 并选中该会话。启动器为 `dsh-open.cmd`。
+
+**落地地址不再写死端口**——`dsh-open.cmd` 按顺序解析：
+
+1. 环境变量 `DSH_SESSION_LINK_WEB_URL`（显式覆盖）
+2. 状态文件 `<状态目录>\web-url` —— 由插件的宿主半边在启动时写入（内容是当前 Web 服务的真实地址，如 DSH Desktop 的非 3080 端口）
+3. `http://127.0.0.1:3080`（普通 `dsh web` 的回退）
+
+状态目录 = `%DSH_SESSION_LINK_STATE_DIR%` → `%LOCALAPPDATA%\dsh-session-link` → `%TEMP%\dsh-session-link`。每次点击都会把用了哪个来源写进 `%TEMP%\dsh-open.log`（`source=env|file|default|default-invalid`），方便排查。
 
 ```powershell
-# 注册
+# 注册（若 dsh:// 已被别的程序占用，会拒绝并打印占用者）
 powershell -ExecutionPolicy Bypass -File register-protocol.ps1
+# 接管已被占用的 dsh://（例如桌面端）
+powershell -ExecutionPolicy Bypass -File register-protocol.ps1 -Force
 # 注销
 powershell -ExecutionPolicy Bypass -File register-protocol.ps1 -Uninstall
 ```
 
-打开会话需要 `dsh web` 正在运行。
+打开会话需要 `dsh web`（或对应的桌面端）正在运行。
+
+## DSH Desktop（桌面端）
+
+DSH Desktop 自带一条 `dsh` 协议注册（指向 `DSH Desktop.exe "%1"`，默认值 `URL:DSH Protocol`），但 **2.0.x 的桌面壳不解析会话参数**（没有 `setAsDefaultProtocolClient` / `open-url` / `?session=` 处理，`second-instance` 只把窗口提前）：所以点 `dsh://` 在桌面端只会把窗口唤到前面，不会跳到会话。
+
+本插件给出的选择：
+
+| 选择 | 做法 | 结果 |
+|---|---|---|
+| **接管协议** | `register-protocol.ps1 -Force` | `dsh://` 交给 `dsh-open.cmd`，它读宿主半边写的实时地址（桌面端端口也对），能正常打开会话 |
+| **保持桌面端注册** | 什么都不做 | `dsh://` 仍由桌面壳处理，跳不过去；等上游实现参数解析 |
+| **不用协议** | 复制按钮 + 粘进对话 | 跨对话引用上下文**与协议无关**，任何环境都可用 |
+
+> 桌面端 profile 同样会加载本插件（host/client 两半边都在），所以实时地址文件由它在启动时写入；用 `-Force` 接管后即可直接跳转。若你更希望桌面壳自己实现解析，可向上游反馈（本插件无法代劳）。
 
 ## 模型看到的
 
@@ -123,8 +147,9 @@ pnpm install
 npm test
 ```
 
-- `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、两种 web 链接、规范 URI、普通文本、畸形 URI、prepare 失败、resolver 不返回 `additionalContext`），断言 bundle patch 不重复插入 `session-reference`，并驱动 `/s/<ID>` 重定向路由（302 / 404 / 405）
+- `host-half.test.mjs` —— 用真实 cordis waterfall 驱动 `agent/pre-step` 监听器（`dsh://` 链接、两种 web 链接、规范 URI、普通文本、畸形 URI、prepare 失败、resolver 不返回 `additionalContext`），断言 bundle patch 不重复插入 `session-reference`，驱动 `/s/<ID>` 重定向路由（302 / 404 / 405），并校验宿主半边把实时 Web 地址写进状态目录（无 `webServer` 的组合不写）
 - `client-half.test.mjs` —— 在 DOM shim 与可控假定时器下加载浏览器 bundle，检查插件表面与 `inject`（含 `uiWorkspace`）、头部按钮注册、复制按钮仍输出 `dsh://` 值，并对一个**不含 `sessions.open`** 的假上下文驱动 `ctx.uiWorkspace.openSession()`：四种深链 URL 形式与优先级、编码/畸形/空/无关 URL、目录延迟到达、同步导航瞬时失败、`getSnapshot` 瞬时抛错后恢复、目标缺失时按 50 次 × 200ms 的有界预算（~10 秒）后告警、`ctx.effect` 销毁取消排队重试以及销毁后已出队回调不再导航、成功只导航一次；同时校验包清单的 `dsh.client.inject` 与 `^0.1.7-rc.1 || ^0.2.0-rc.2` 依赖范围，并对所安装真实 `dsh-client-ui-workspace`（版本仅作诊断输出、不做等值断言）断言 `openSession(target: SessionTarget): void` 接口声明
+- `launcher.test.mjs` —— 用静态断言检查 `dsh-open.cmd` 的三级地址解析链（环境变量 → 状态文件 → 3080）与 `register-protocol.ps1` 的冲突门控（`-Force` / 占用者提示）；在 Windows 上另用探针副本（把 `start` 换成 `echo`）实测四条路径：回退、读状态文件（含末尾斜杠与 LF 文件）、环境变量优先、非法文件内容回退，并校对日志里的 `source=` 来源
 - `resolver-integration.test.mjs` —— 用官方真实 resolver（0.1.0-rc.8 起自带 `agent/pre-step` 监听）与插件同挂一个 cordis 上下文：断言 `dsh://` 链接注入一次、规范 URI 只由上游注入一次（防双注入/顺序回归），并验证自引用与不可读会话仍然 fail-open
 - `inspect-logs.mjs <会话目录> [会话ID…]` —— 解压拼接式 zstd 会话日志并报告 `session-reference` 事件（便于验证注入）
 

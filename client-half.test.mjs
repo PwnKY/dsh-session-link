@@ -112,6 +112,7 @@ check("dsh.client.inject includes ui-workspace", pkg.dsh?.client?.inject?.includ
 check("dsh.client.inject keeps locale + ui-conversation", ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-conversation"].every((id) => pkg.dsh.client.inject.includes(id)));
 check("peer client packages span the 0.1.7 / 0.2.x lines", ["@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-workspace"].every((id) => pkg.peerDependencies[id] === DSH_RANGE));
 check("session-reference dependency spans the 0.1.7 / 0.2.x lines", pkg.dependencies["@deepseek-ai/dsh-session-reference"] === DSH_RANGE);
+check("engines.dsh spans the 0.1.7 / 0.2.x lines", pkg.engines?.dsh === DSH_RANGE);
 
 // --- confirm the installed (real) workspace package exposes the navigation seam ---
 {

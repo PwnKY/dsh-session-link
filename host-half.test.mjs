@@ -4,7 +4,9 @@
 // Run after `pnpm install` (devDependencies: @deepseek-ai/cordis,
 // @deepseek-ai/dsh-session-reference).
 import { Context } from "@deepseek-ai/cordis";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { apply } from "./lib/index.js";
 
 let failures = 0;
@@ -24,6 +26,10 @@ const prepared = [];
 let failWith = null;
 let omitContext = false;
 const routes = [];
+// The host half publishes the live Web URL for dsh-open.cmd into the shared
+// state directory; point that at a scratch dir for the test run.
+const stateDir = mkdtempSync(join(tmpdir(), "dshsl-state-"));
+process.env.DSH_SESSION_LINK_STATE_DIR = stateDir;
 const fakeResolver = {
   async prepare(agent, content, references, signal) {
     if (failWith !== null) throw failWith;
@@ -37,8 +43,10 @@ const fakeResolver = {
 ctx.provide("sessionReferenceResolver", fakeResolver);
 // Web compositions provide `webServer`; the plugin claims the legacy `/s`
 // prefix there so old browser links keep working (harness >= 0.1.1-rc.2 has
-// no SPA fallback and answers `/s/<id>` with 404).
+// no SPA fallback and answers `/s/<id>` with 404) and publishes the live Web
+// URL for the `dsh://` launcher.
 ctx.provide("webServer", {
+  port: 3198,
   register(route) {
     routes.push(route);
     return () => {};
@@ -136,5 +144,25 @@ check("legacy /s redirects to the query form", redirect.status === 302 && redire
 check("legacy /s keeps unknown ids a 404", driveRoute("/s/not-a-session").status === 404);
 check("legacy /s keeps non-GET a 405", driveRoute("/s/session-abc123", "POST").status === 405);
 
+// Case 13: the host half publishes the live Web URL the `dsh://` launcher
+// reads, so a deployment that is not on 3080 (e.g. DSH Desktop) still opens.
+const webUrlFile = join(stateDir, "web-url");
+check("web-url published for the launcher", existsSync(webUrlFile) && readFileSync(webUrlFile, "utf8").split(/\r?\n/)[0] === "http://127.0.0.1:3198");
+check("web-url uses Windows line endings", /\r\n$/.test(readFileSync(webUrlFile, "utf8")));
+
+// Case 14: a composition without `webServer` (headless/TUI) publishes nothing
+// and must not fail to activate.
+const headlessStateDir = mkdtempSync(join(tmpdir(), "dshsl-state-headless-"));
+const headlessCtx = new Context();
+headlessCtx.provide("sessionReferenceResolver", fakeResolver);
+process.env.DSH_SESSION_LINK_STATE_DIR = headlessStateDir;
+apply(headlessCtx);
+await new Promise((resolve) => setTimeout(resolve, 0));
+check("no webServer: no web-url written", !existsSync(join(headlessStateDir, "web-url")));
+process.env.DSH_SESSION_LINK_STATE_DIR = stateDir;
+rmSync(headlessStateDir, { recursive: true, force: true });
+rmSync(stateDir, { recursive: true, force: true });
+
+delete process.env.DSH_SESSION_LINK_STATE_DIR;
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

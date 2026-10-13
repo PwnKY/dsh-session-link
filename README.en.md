@@ -62,7 +62,7 @@ Only links carrying a harness-shaped session id (`session-…`) are treated as r
 
 ## Quick start
 
-Requires DeepSeek Harness `dsh` (any profile with the web surface) and **dsh ≥ 0.1.7-rc.1** (**both the 0.1.7 and 0.2.x lines are supported**; 0.2.0-rc.2 is verified end to end): that minimum is for the `ctx.uiWorkspace.openSession()` navigation seam the browser half depends on (earlier versions lack it, and the old `ctx.sessions.open` was removed upstream). The `session-reference` service is not tied to that release — the shipped web bundle has provided it since dsh 0.1.0-rc.8.
+Requires DeepSeek Harness `dsh` (any profile with the web surface) and **dsh ≥ 0.1.7-rc.1** (**both the 0.1.7 and 0.2.x lines are supported**; 0.2.0-rc.2 is verified end to end): that minimum is for the `ctx.uiWorkspace.openSession()` navigation seam the browser half depends on (earlier versions lack it, and the old `ctx.sessions.open` was removed upstream). The `session-reference` service is not tied to that release — the shipped web bundle has provided it since dsh 0.1.0-rc.8. The manifest also declares `engines.dsh` (`^0.1.7-rc.1 || ^0.2.0-rc.2`) so plugin marketplaces can judge compatibility directly instead of guessing from peers.
 
 ```bash
 # 1. One command: installs the package, auto-joins the profile's bundle layer,
@@ -93,16 +93,40 @@ powershell -ExecutionPolicy Bypass -File register-protocol.ps1
 
 ## Windows `dsh://` protocol handler
 
-`register-protocol.ps1` registers the per-user `dsh` URL protocol (HKCU, no admin rights) so clicking a `dsh://session/<id>` link anywhere (browser, chat app, terminal) opens `http://127.0.0.1:3080/?session=<id>`, which selects that session. The launcher is `dsh-open.cmd`.
+`register-protocol.ps1` registers the per-user `dsh` URL protocol (HKCU, no admin rights) so clicking a `dsh://session/<id>` link anywhere (browser, chat app, terminal) opens this machine's web GUI and selects that session. The launcher is `dsh-open.cmd`.
+
+**The landing address no longer hardcodes a port** — `dsh-open.cmd` resolves it in order:
+
+1. env var `DSH_SESSION_LINK_WEB_URL` (explicit override)
+2. the state file `<state dir>\web-url`, written at boot by the plugin's host half (it holds this Web service's real address, e.g. DSH Desktop's non-3080 port)
+3. `http://127.0.0.1:3080` (plain `dsh web` fallback)
+
+The state dir is `%DSH_SESSION_LINK_STATE_DIR%` → `%LOCALAPPDATA%\dsh-session-link` → `%TEMP%\dsh-session-link`. Every click records which source it used in `%TEMP%\dsh-open.log` (`source=env|file|default|default-invalid`), which makes a stale file easy to spot.
 
 ```powershell
-# register
+# register (refuses to steal dsh:// from another program)
 powershell -ExecutionPolicy Bypass -File register-protocol.ps1
+# take the scheme over from another handler (e.g. the desktop shell)
+powershell -ExecutionPolicy Bypass -File register-protocol.ps1 -Force
 # unregister
 powershell -ExecutionPolicy Bypass -File register-protocol.ps1 -Uninstall
 ```
 
-The web GUI (`dsh web`) must be running for a link to open a session.
+The web GUI (`dsh web`, or the desktop client) must be running for a link to open a session.
+
+## DSH Desktop
+
+DSH Desktop ships its own `dsh` registration (`DSH Desktop.exe "%1"`, description `URL:DSH Protocol`), but **the 2.0.x shell does not parse session parameters** (no `setAsDefaultProtocolClient`, no `open-url`, no `?session=` handling; `second-instance` merely focuses the window). Clicking a `dsh://` link there only raises the window — it never jumps to the session.
+
+What this plugin offers:
+
+| Choice | How | Result |
+|---|---|---|
+| **Take the scheme over** | `register-protocol.ps1 -Force` | `dsh://` goes to `dsh-open.cmd`, which reads the live address the host half publishes (works on the desktop's own port too), so sessions open |
+| **Leave the desktop registration** | do nothing | `dsh://` stays with the desktop shell and cannot jump; wait for upstream parameter support |
+| **Skip the protocol** | copy button + paste into a conversation | cross-conversation context needs no protocol and works everywhere |
+
+> The desktop profile loads both halves of this plugin, so it publishes the live address file at boot; taking the scheme over is then enough. If you would rather have the desktop shell implement parsing itself, that is an upstream request — this plugin cannot do it for them.
 
 ## What the model sees
 
@@ -125,7 +149,8 @@ pnpm install
 npm test
 ```
 
-- `host-half.test.mjs` — drives the `agent/pre-step` listener through a real cordis waterfall (`dsh://` links, both web link forms, canonical URIs, plain text, malformed URIs, prepare failures, a resolver without `additionalContext`), asserts the bundle patch never re-inserts `session-reference`, and drives the legacy `/s/<id>` redirect route (302 / 404 / 405).
+- `host-half.test.mjs` — drives the `agent/pre-step` listener through a real cordis waterfall (`dsh://` links, both web link forms, canonical URIs, plain text, malformed URIs, prepare failures, a resolver without `additionalContext`), asserts the bundle patch never re-inserts `session-reference`, drives the legacy `/s/<id>` redirect route (302 / 404 / 405), and checks that the host half publishes the live Web URL into the state directory (and publishes nothing without a `webServer`).
+- `launcher.test.mjs` — static assertions over `dsh-open.cmd`'s three-step address chain (env → state file → 3080) and `register-protocol.ps1`'s conflict gate (`-Force` / owner report); on Windows it also drives a probe copy (`start` swapped for `echo`) through the fallback, the state file (trailing slash and LF-only files), the env override, and a garbage file, checking the `source=` line each time.
 - `client-half.test.mjs` — loads the browser bundle under a DOM shim with controllable fake timers: checks the plugin surface and `inject` (including `uiWorkspace`), header-action registration, that the copy button still emits the `dsh://` value, and drives `ctx.uiWorkspace.openSession()` against a fake context deliberately **without `sessions.open`** (all four deep-link URL forms plus precedence, encoded/malformed/empty/unrelated URLs, a delayed catalog, a transient synchronous navigation failure, a transient `getSnapshot` throw, a missing target that warns after ~10 s with a bounded budget (50 retries of 200 ms), `ctx.effect` teardown cancelling queued retries plus a late already-dequeued callback after disposal, and exactly-once navigation). It also checks the package manifest's `dsh.client.inject` and `^0.1.7-rc.1 || ^0.2.0-rc.2` dependency ranges, and asserts the installed real `dsh-client-ui-workspace`'s `openSession(target: SessionTarget): void` declaration (the installed version is reported but not pinned).
 - `resolver-integration.test.mjs` — mounts the real shipped resolver (which listens on `agent/pre-step` itself since dsh 0.1.0-rc.8) beside this plugin on one cordis context: asserts the `dsh://` link injects once and a canonical URI is injected only by upstream (no double injection / ordering regression), and that self-references and unreadable sessions stay fail-open.
 - `inspect-logs.mjs <sessions-dir> [sessionId…]` — decompresses concatenated-zstd session logs and reports `session-reference` events (useful for verifying injection).

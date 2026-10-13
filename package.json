@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-link",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Codex-style session deep links for DeepSeek Harness (dsh): copy a dsh:// link from any conversation, open it in the browser, or paste it into another conversation to read that session's context.",
   "type": "module",
   "main": "lib/index.js",
@@ -20,7 +20,7 @@
     "README.en.md"
   ],
   "scripts": {
-    "test": "node host-half.test.mjs && node client-half.test.mjs && node resolver-integration.test.mjs",
+    "test": "node host-half.test.mjs && node client-half.test.mjs && node launcher.test.mjs && node resolver-integration.test.mjs",
     "prepublishOnly": "npm test"
   },
   "dsh": {
@@ -50,6 +50,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PwnKY/dsh-session-link.git"
+  },
+  "engines": {
+    "dsh": "^0.1.7-rc.1 || ^0.2.0-rc.2"
   },
   "dependencies": {
     "@deepseek-ai/dsh-session-reference": "^0.1.7-rc.1 || ^0.2.0-rc.2"

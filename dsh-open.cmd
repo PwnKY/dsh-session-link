@@ -3,7 +3,12 @@ rem DeepSeek Harness dsh protocol-handler launcher, registered by
 rem register-protocol.ps1.
 rem
 rem Input  dsh://session/SESSIONID
-rem Output http://127.0.0.1:3080/?session=SESSIONID
+rem Output BASE/?session=SESSIONID, where BASE is resolved in this order:
+rem   1. %DSH_SESSION_LINK_WEB_URL%   explicit override
+rem   2. <state dir>\web-url          written by the plugin's host half
+rem   3. http://127.0.0.1:3080        plain "dsh web" fallback
+rem The state dir is %DSH_SESSION_LINK_STATE_DIR%, else
+rem %LOCALAPPDATA%\dsh-session-link, else %TEMP%\dsh-session-link.
 rem
 rem The session marker rides on the index route: since dsh 0.1.1-rc.2 the Web
 rem server answers unknown paths such as /s/SESSIONID with 404 - the SPA
@@ -20,6 +25,40 @@ if not "%u:~0,14%"=="dsh://session/" (
   exit /b 0
 )
 set "id=%u:~14%"
->> "%TEMP%\dsh-open.log" echo %DATE% %TIME% raw=%~1 target=http://127.0.0.1:3080/?session=%id%
-start "" "http://127.0.0.1:3080/?session=%id%"
+
+rem --- resolve the web base URL --------------------------------------------
+set "base="
+set "source="
+if defined DSH_SESSION_LINK_WEB_URL (
+  set "base=%DSH_SESSION_LINK_WEB_URL%"
+  set "source=env"
+)
+if not defined base call :read-state-file
+if not defined base (
+  set "base=http://127.0.0.1:3080"
+  set "source=default"
+)
+if /i not "%base:~0,4%"=="http" (
+  set "base=http://127.0.0.1:3080"
+  set "source=default-invalid"
+)
+if "%base:~-1%"=="/" set "base=%base:~0,-1%"
+
+>> "%TEMP%\dsh-open.log" echo %DATE% %TIME% raw=%~1 source=%source% target=%base%/?session=%id%
+start "" "%base%/?session=%id%"
 endlocal
+exit /b 0
+
+:read-state-file
+set "dir=%DSH_SESSION_LINK_STATE_DIR%"
+if not defined dir set "dir=%LOCALAPPDATA%\dsh-session-link"
+if not defined LOCALAPPDATA set "dir=%TEMP%\dsh-session-link"
+if not exist "%dir%\web-url" exit /b 0
+rem `for /f` handles CRLF and LF-only files alike and takes the first line.
+for /f "usebackq delims=" %%L in ("%dir%\web-url") do (
+  if not defined base (
+    set "base=%%L"
+    set "source=file"
+  )
+)
+exit /b 0
